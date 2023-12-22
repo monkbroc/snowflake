@@ -14,9 +14,6 @@
 #define SUPPORT_MP3_PLAYBACK
 #define SUPPORT_VOICE_DETECTION
 
-#define WELCOME_VOICE "voice_welcome.mp3"
-#define SUPER_STAR_MP3 "super_star.mp3"
-
 #define MINIMP3_IMPLEMENTATION
 #include "minimp3/minimp3.h"
 
@@ -104,13 +101,11 @@ void setup()
     {
         if (asset.name().endsWith(".mp3"))
         {  
-            //don't add WELCOME_VOICE or SUPER_STAR_MP3
-            if( (asset.name() != WELCOME_VOICE) && (asset.name() != SUPER_STAR_MP3) ) {
-                songs.push_back(asset.name());
-                //Log.info("Found song: %s", asset.name().c_str());
-            }
+            songs.push_back(asset.name());
         }
     }
+    // shuffle the songs
+    std::random_shuffle(songs.begin(), songs.end());
 
     //hardware watchdog
     Watchdog.init(WatchdogConfiguration().timeout(10s));
@@ -126,12 +121,8 @@ void setup()
           case RESET_REASON_PIN_RESET:
           case RESET_REASON_USER:
           case RESET_REASON_POWER_DOWN:
-              //play a two-tone beep boop when booting up only from a cold power on or USB reset
+              //don't beep when booting
               //tonePlayer.play( TonePlayer::TONE_SEQUENCE_BOOT );
-
-              //play the welcome mp3
-              //don't play this in the updated version, but leave the code in here incase someone wants to modify
-              //mp3Player.play(WELCOME_VOICE, 100);
           break;
       }
   #endif
@@ -148,60 +139,53 @@ void setup()
 
 
 bool mp3IsPlaying = false;
+bool mp3StopRequested = false;
+
+void playNextSong() {
+    if( mp3IsPlaying ) {
+        mp3StopRequested = true;
+    }
+    //play the next song in the list
+    //it allows max of 1 item to be queued and provides a callback
+    mp3Player.play(songs[songIndex], 100,  [&](const bool playing){
+        mp3IsPlaying = playing;
+    }, [&](){
+        if (mp3StopRequested) {
+            mp3StopRequested = false;
+            return true;
+        }
+        return false;
+    });
+    songIndex = (songIndex + 1) % songs.size();
+}
 
 void loop()
 {
-    static bool localSparkleMode = false;
-
     // Update button state
     particleButton.Update();
 
     //kick the watchdog
     Watchdog.refresh(); 
 
-    //If we are in 'sparkle' mode, run the basic sparkle animation and play the audio, detecting when it finishes and then resuming the previous animation mode
-    if( sparkleMode && !localSparkleMode ) {
-        //only start sparkle mode if we are not already playing an MP3
-        if( !mp3IsPlaying ) {
-            //entering sparkle mode 
-            rgbStrip->setMode(RgbStrip::MODE_SPARKLE);
-
-            //start the mp3
-            mp3Player.play(SUPER_STAR_MP3, 100, [&](const bool playing){
-                mp3IsPlaying = playing;
-            });
-
-            localSparkleMode = true;
-        }
-        else {
-            Log.info("MP3 is already playing, not starting sparkle mode");
-            sparkleMode = false;
-        }
-    }
-    else if( sparkleMode && localSparkleMode ) {
-        //has the mp3 finished?
-        if( !mp3IsPlaying ) {
-            //exit sparkle mode
-            sparkleMode = false;
-            localSparkleMode = false;
-
-            //restore the previous led mode
-            rgbStrip->setMode(mode);
-        }
+    //Play a song when I say "Sparkle!"
+    if( sparkleMode && !mp3IsPlaying ) {
+        playNextSong();
     }
 
-    //ignore the buttons if we are in sparkle mode
-    if( !localSparkleMode ) {
-        //switch on particleButton.clicks
-        switch( particleButton.clicks ) 
-        {
-            case 1:
-                Log.info("SINGLE click");
-                //inc mode
+    //switch on particleButton.clicks
+    switch( particleButton.clicks ) 
+    {
+        case 1:
+            Log.info("SINGLE click");
+            // if music is playing, stop it
+            if( mp3IsPlaying ) {
+                mp3StopRequested = true;
+            } else {
+                // change the LED mode
                 mode = (RgbStrip::MODES_T)((mode + 1) % RgbStrip::MODE_MAX);
 
                 // don't allow these to be selected by default as its just used for bootup or the secret..
-                if( (mode == RgbStrip::MODE_OFF) || (mode == RgbStrip::MODE_SPARKLE) ) { 
+                if( (mode == RgbStrip::MODE_OFF)) { 
                     mode = RgbStrip::MODE_SNOWFLAKE;
                 }
                 rgbStrip->setMode(mode);
@@ -209,37 +193,22 @@ void loop()
                 //store the updated setting
                 settings.set("ledMode", String(mode));
                 settings.store();
+            }
+        break;
 
-                #ifdef SUPPORT_AUDIO_TONE
-                    //play a two-tone beep boop when switching the display mode
-                    //this will fail if already playing a song
-                    tonePlayer.play( TonePlayer::TONE_SEQUENCE_TWO_TONE );
-                #endif
-            break;
+        case 2:
+            Log.info("DOUBLE click");
+        break;
 
-            case 2:
-                Log.info("DOUBLE click");
-            break;
+        case 3:
+            Log.info("TRIPLE click");
+        break;
 
-            case 3:
-                Log.info("TRIPLE click");
-            break;
+        case -1:
+            Log.info("SINGLE LONG click");
+            playNextSong();
 
-            case -1:
-                Log.info("SINGLE LONG click");
-
-                #ifdef SUPPORT_MP3_PLAYBACK
-                    if( !mp3IsPlaying ) {
-                        //play the next song in the list
-                        //it allows max of 1 item to be queued and provides a callback
-                        mp3Player.play(songs[songIndex], 100,  [&](const bool playing){
-                            mp3IsPlaying = playing;
-                        });
-                        songIndex = (songIndex + 1) % songs.size();
-                    }
-                #endif
-            break;
-        }
+        break;
     }
 }
 

@@ -20,7 +20,7 @@ MP3Player::MP3Player( AudioPlayer* audioPlayer )
                     item->callback(true);
                 }
 
-                internalPlaySong(*(item->filename));
+                internalPlaySong(*(item->filename), item->stopCallback);
 
                 //if there is a callback, call it
                 if( item->callback ) {
@@ -35,7 +35,7 @@ MP3Player::MP3Player( AudioPlayer* audioPlayer )
 }
 
 
-void MP3Player::internalPlaySong( const String filename )
+void MP3Player::internalPlaySong( const String filename, MP3StopCallback stopCallback )
 {
     Log.info("MP3Player::internalPlaySong(%s)", filename.c_str());
 
@@ -88,6 +88,11 @@ void MP3Player::internalPlaySong( const String filename )
                     }
                 }
 
+                // user requested to stop
+                if (stopCallback && stopCallback())
+                {
+                    break;
+                }
             } while (samples > 0);
 
             //log that we finished

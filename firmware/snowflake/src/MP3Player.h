@@ -6,22 +6,25 @@
 class MP3Player
 {
   using MP3PlaybackCallback = std::function<void(const bool playing)>;
+  using MP3StopCallback = std::function<bool()>;
 
   typedef struct {
       String* filename;
       uint8_t volume;
       MP3PlaybackCallback callback;
+      MP3StopCallback stopCallback;
   } MP3PlayerQueueItem;
   
   public:
       MP3Player( AudioPlayer* audioPlayer );
 
-      void play( const String filename, const uint8_t volume = 100, MP3PlaybackCallback callback = nullptr ) {
+      void play( const String filename, const uint8_t volume = 100, MP3PlaybackCallback callback = nullptr, MP3StopCallback stopCallback = nullptr ) {
 
           MP3PlayerQueueItem *item = new MP3PlayerQueueItem();
           item->filename = new String(filename);
           item->volume = volume;
           item->callback = callback;
+          item->stopCallback = stopCallback;
 
           Log.info("MP3Player::play(%s)", item->filename->c_str());
 
@@ -34,7 +37,7 @@ class MP3Player
       }
 
   private:
-    void internalPlaySong( const String filename );
+    void internalPlaySong( const String filename, MP3StopCallback stopCallback );
 
     bool readMP3File( const String filename, uint8_t** mp3Data, uint32_t* mp3Size );
 
